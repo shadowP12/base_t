@@ -31,6 +31,8 @@ protected:
     class Renderer* _renderer = nullptr;
 
     EzSwapchain _swapchain = VK_NULL_HANDLE;
+    EzQueryPool _timestamp_query_pool = VK_NULL_HANDLE;
 
     double _time = 0.0;
+    double _frame_gpu_avg = 0.0;
 };

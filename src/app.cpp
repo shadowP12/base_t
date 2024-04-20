@@ -69,6 +69,7 @@ void Application::setup(const ApplicationSetting& setting)
     rhi_shader_mgr_init();
 
     ez_create_swapchain(glfwGetWin32Window(_window_ptr), _swapchain);
+    ez_create_query_pool(16, VK_QUERY_TYPE_TIMESTAMP, _timestamp_query_pool);
 
     _main_camera = new Camera();
     _main_camera->set_aspect((float)setting.window_width / (float)setting.window_height);
@@ -88,6 +89,7 @@ void Application::exit()
     delete _camera_controller;
 
     ez_destroy_swapchain(_swapchain);
+    ez_destroy_query_pool(_timestamp_query_pool);
 
     glfwDestroyWindow(_window_ptr);
     glfwTerminate();
@@ -125,6 +127,9 @@ void Application::tick(float dt)
 
     ez_acquire_next_image(_swapchain);
 
+    ez_reset_query_pool(_timestamp_query_pool, 0, 16);
+    ez_write_timestamp(_timestamp_query_pool, 0);
+
     _renderer->render(_swapchain, dt);
 
     VkImageMemoryBarrier2 present_barrier[] = { ez_image_barrier(_swapchain, EZ_RESOURCE_STATE_PRESENT) };
@@ -132,5 +137,17 @@ void Application::tick(float dt)
 
     ez_present(_swapchain);
 
+    ez_write_timestamp(_timestamp_query_pool, 1);
     ez_submit();
+
+    uint64_t timestamp_results[2] = {};
+    ez_get_query_pool_results(_timestamp_query_pool, 0, 2, sizeof(timestamp_results), timestamp_results, sizeof(timestamp_results[0]), VK_QUERY_RESULT_64_BIT);
+
+    double frame_gpu_begin = double(timestamp_results[0]) * ez_get_timestamp_period() * 1e-6;
+    double frame_gpu_end = double(timestamp_results[1]) * ez_get_timestamp_period() * 1e-6;
+    _frame_gpu_avg = _frame_gpu_avg * 0.95 + (frame_gpu_end - frame_gpu_begin) * 0.05;
+
+    char title[256];
+    snprintf(title, sizeof(title), "gpu: %.2f ms", _frame_gpu_avg);
+    glfwSetWindowTitle(_window_ptr, title);
 }
